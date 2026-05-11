@@ -5,57 +5,98 @@ const app = express();
 
 app.use(express.json());
 
-// 服务端 Cookie 配置
-const QM_COOKIES = process.env.QM_COOKIES || '';
+// 运行时读取环境变量（支持 Cloud Functions 动态注入）
+// 支持 base64 编码（避免环境变量中的空格/换行限制）
+function getServerCookie() {
+  const raw = process.env.QM_COOKIES || '';
+  if (!raw) return '';
+
+  // 检测是否为 base64 编码（只包含 base64 字符且长度合理）
+  const isBase64 = /^[A-Za-z0-9+/=]+$/.test(raw) && raw.length % 4 === 0 && raw.length > 20;
+
+  if (isBase64) {
+    try {
+      const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+      console.log('[Cookie] 检测到 base64 编码，已解码');
+      return decoded;
+    } catch (e) {
+      console.log('[Cookie] base64 解码失败，按原字符串处理');
+      return raw;
+    }
+  }
+
+  return raw;
+}
 
 // 服务端 Cookie 验证状态
 let serverCookieStatus = {
   hasCookie: false,
   isValid: false,
-  checkedAt: null
+  checkedAt: null,
+  cookieLength: 0,
+  errorMsg: ''
 };
 
 // 验证服务端 Cookie
 async function validateServerCookie() {
-  if (!QM_COOKIES) {
-    serverCookieStatus = { hasCookie: false, isValid: false, checkedAt: new Date() };
+  const cookie = getServerCookie();
+  console.log('[Cookie] 环境变量读取结果:', {
+    hasValue: !!cookie,
+    length: cookie.length,
+    envKeys: Object.keys(process.env).filter(k => k.includes('COOKIE') || k.includes('cookie'))
+  });
+
+  if (!cookie) {
+    serverCookieStatus = { hasCookie: false, isValid: false, checkedAt: new Date(), cookieLength: 0, errorMsg: '环境变量 QM_COOKIES 未设置' };
     console.log('[Cookie] 未配置 QM_COOKIES 环境变量');
     return;
   }
 
   try {
-    const qqMusic = new QQMusic({ cookie: QM_COOKIES });
+    const qqMusic = new QQMusic({ cookie });
     const results = await qqMusic.search('周杰伦', 1, 5);
     if (results && results.length > 0) {
-      serverCookieStatus = { hasCookie: true, isValid: true, checkedAt: new Date() };
+      serverCookieStatus = { hasCookie: true, isValid: true, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: '' };
       console.log('[Cookie] 服务端 Cookie 验证通过 ✓');
     } else {
-      serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date() };
+      serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: '搜索无结果，Cookie 可能无效' };
       console.log('[Cookie] 服务端 Cookie 验证失败：搜索无结果');
     }
   } catch (error) {
-    serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date() };
+    serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: error.message };
     console.log('[Cookie] 服务端 Cookie 验证失败：', error.message);
   }
 }
 
 function getQQMusic(req) {
   // 优先使用有效的服务端 Cookie
-  const cookie = (serverCookieStatus.isValid ? QM_COOKIES : '') || req.headers['x-qqmusic-cookie'] || '';
+  const serverCookie = serverCookieStatus.isValid ? getServerCookie() : '';
+  const clientCookie = req.headers['x-qqmusic-cookie'] || '';
+  const cookie = serverCookie || clientCookie;
   return new QQMusic({
     cookie,
     highQuality: req.query.highQuality === 'true'
   });
 }
 
-// Cookie 状态接口（不暴露 Cookie 值）
+// Cookie 状态接口（不暴露 Cookie 值，但返回调试信息）
 app.get('/cookie-status', (req, res) => {
+  const cookie = getServerCookie();
   res.json({
     code: 0,
     data: {
       hasServerCookie: serverCookieStatus.hasCookie,
       isValid: serverCookieStatus.isValid,
-      needClientCookie: !serverCookieStatus.isValid
+      needClientCookie: !serverCookieStatus.isValid,
+      // 调试信息
+      debug: {
+        envVarSet: !!cookie,
+        cookieLength: cookie.length,
+        checkedAt: serverCookieStatus.checkedAt,
+        errorMsg: serverCookieStatus.errorMsg,
+        // 提示：腾讯云 Pages 环境变量值限制 500 字节
+        hint: cookie.length === 0 ? '请在平台重新部署以生效环境变量，或检查变量值是否超过 500 字节限制' : undefined
+      }
     }
   });
 });
