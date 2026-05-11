@@ -1,34 +1,30 @@
 'use client';
 
 import { useState } from 'react';
+import { Download, Loader2, Check, X, AlertTriangle } from 'lucide-react';
 import { api, downloadSong } from '../lib/api';
 
-export default function BatchDownloader({ songs, selectedSongs, onComplete }) {
+export default function BatchDownloader({ songs, selectedSongs, onDownload }) {
   const [highQuality, setHighQuality] = useState(true);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [results, setResults] = useState([]);
-  const [showResults, setShowResults] = useState(false);
 
   const selectedSongList = songs.filter(s => selectedSongs.includes(s.mid));
 
   const handleBatchDownload = async () => {
     if (selectedSongList.length === 0) {
-      alert('请先选择要下载的歌曲');
+      alert('请先选择要下载的歌曲（在歌曲列表中勾选）');
       return;
     }
 
     setLoading(true);
     setProgress(0);
-    setResults([]);
-    setShowResults(false);
 
     try {
       const res = await api.getBatchUrls(selectedSongList, highQuality);
       const urls = res.data;
       
       let successCount = 0;
-      const downloadResults = [];
 
       for (let i = 0; i < urls.length; i++) {
         const item = urls[i];
@@ -36,24 +32,16 @@ export default function BatchDownloader({ songs, selectedSongs, onComplete }) {
 
         if (item.url) {
           try {
-            // 使用完整的歌曲对象下载
             downloadSong(item, `${item.name} - ${item.artist}.mp3`);
-            
             successCount++;
-            downloadResults.push({ ...item, status: 'success' });
-            
+            onDownload?.();
             await new Promise(resolve => setTimeout(resolve, 500));
           } catch (err) {
-            downloadResults.push({ ...item, status: 'error', error: err.message });
+            console.error('下载失败:', err);
           }
-        } else {
-          downloadResults.push({ ...item, status: 'failed', error: '无法获取下载链接' });
         }
       }
 
-      setResults(downloadResults);
-      setShowResults(true);
-      
       if (successCount > 0) {
         alert(`成功下载 ${successCount}/${selectedSongList.length} 首歌曲`);
       } else {
@@ -68,91 +56,53 @@ export default function BatchDownloader({ songs, selectedSongs, onComplete }) {
   };
 
   return (
-    <>
-      <div className="card">
-        <h2>批量下载</h2>
-        
-        <div style={{ marginBottom: '15px' }} >
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} >
+    <div className="batch-section">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'none' }}>
             <input
               type="checkbox"
+              className="checkbox-brutal"
               checked={highQuality}
               onChange={(e) => setHighQuality(e.target.checked)}
               disabled={loading}
             />
-            <span>优先下载高品质 (320kbps)</span>
-            {highQuality && <span className="quality-badge quality-hq">HQ</span>}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>高品质 (320kbps)</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: '0.75rem' }}>需会员Cookie</div>
+            </div>
+            {highQuality && <span className="badge-brutal hq">HQ</span>}
           </label>
         </div>
 
-        <div className="actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ color: 'var(--fg-muted)', fontSize: '0.85rem' }}>
+            已选择 <strong style={{ color: 'var(--accent)' }}>{selectedSongList.length}</strong> 首
+          </div>
+          
           <button 
-            className="btn-primary" 
+            className="btn-brutal"
             onClick={handleBatchDownload}
             disabled={loading || selectedSongList.length === 0}
           >
-            {loading ? `下载中... (${progress}%)` : `批量下载 (${selectedSongList.length})`}
-          </button>
-          
-          <button 
-            className="btn-secondary" 
-            onClick={() => setShowResults(!showResults)}
-            disabled={results.length === 0}
-          >
-            {showResults ? '隐藏结果' : '查看结果'}
+            {loading ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+            {loading ? ` 下载中 ${progress}%` : ' 批量下载'}
           </button>
         </div>
-
-        {loading && (
-          <div style={{ marginTop: '15px' }} >
-            <div className="progress-bar">
-              <div 
-                className="progress-fill" 
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p style={{ textAlign: 'center', color: '#666', fontSize: '14px' }} >
-              {progress}%
-            </p>
-          </div>
-        )}
       </div>
 
-      {showResults && results.length > 0 && (
-        <div className="card">
-          <h2>下载结果</h2>
-          <div style={{ maxHeight: '400px', overflow: 'auto' }} >
-            <table className="song-list">
-              <thead>
-                <tr>
-                  <th>歌曲</th>
-                  <th>歌手</th>
-                  <th>状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((item, index) => (
-                  <tr key={index}>
-                    <td>{item.name}</td>
-                    <td>{item.artist}</td>
-                    <td>
-                      {item.status === 'success' && (
-                        <span style={{ color: '#28a745', fontWeight: 600 }}>成功</span>
-                      )}
-                      {item.status === 'failed' && (
-                        <span style={{ color: '#dc3545', fontWeight: 600 }}>失败</span>
-                      )}
-                      {item.status === 'error' && (
-                        <span style={{ color: '#ffc107', fontWeight: 600 }}>错误</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {loading && (
+        <>
+          <div className="batch-progress">
+            <div className="batch-progress-fill" style={{ width: `${progress}%` }} />
           </div>
-        </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px', gap: '4px' }}>
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="loading-bar" style={{ height: '16px', animationDuration: `${0.4 + Math.random() * 0.4}s` }} />
+            ))}
+          </div>
+        </>
       )}
-    </>
+    </div>
   );
 }

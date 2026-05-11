@@ -39,14 +39,21 @@ server.get('/api/search', async (req, res) => {
   }
 });
 
-server.get('/api/song/url', async (req, res) => {
+server.post('/api/song/url', async (req, res) => {
   try {
     const { mid, highQuality = 'false' } = req.query;
     if (!mid) {
       return res.status(400).json({ error: 'mid 不能为空' });
     }
     const qqMusic = getQQMusic(req);
-    const url = await qqMusic.getMusicUrl({ mid, raw: {} }, { highQuality: highQuality === 'true' });
+    
+    // 如果请求体中有 song 数据，使用它
+    let songData = { mid, raw: {} };
+    if (req.body && req.body.song) {
+      songData = req.body.song;
+    }
+    
+    const url = await qqMusic.getMusicUrl(songData, { highQuality: highQuality === 'true' });
     res.json({ code: 0, data: { url, mid } });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -291,6 +298,74 @@ server.get('/api/proxy/image', async (req, res) => {
   } catch (error) {
     console.error('[图片代理] 错误:', error);
     res.status(500).send('图片加载失败');
+  }
+});
+
+// 音频代理接口（用于试听）
+server.get('/api/proxy/audio', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'url 不能为空' });
+    }
+
+    const targetUrl = decodeURIComponent(url);
+    console.log('[音频代理] 代理URL:', targetUrl.substring(0, 150));
+
+    // 获取 Cookie
+    const cookie = req.headers['x-qqmusic-cookie'] || '';
+
+    // 直接下载完整音频内容
+    console.log('[音频代理] 开始下载音频...');
+    const response = await fetch(targetUrl, {
+      headers: {
+        'Referer': 'https://y.qq.com/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Cookie': cookie
+      },
+      redirect: 'follow'
+    });
+
+    if (!response.ok) {
+      console.error('[音频代理] 下载失败:', response.status);
+      return res.status(response.status).send('获取音频失败');
+    }
+
+    const contentType = response.headers.get('content-type') || 'audio/mpeg';
+    const contentLength = response.headers.get('content-length');
+    
+    console.log('[音频代理] Content-Type:', contentType);
+    console.log('[音频代理] Content-Length:', contentLength);
+
+    // 如果内容太小，可能是错误响应
+    if (contentLength && parseInt(contentLength) < 1000) {
+      console.log('[音频代理] 警告: 文件过小，可能不是有效音频');
+      const text = await response.text();
+      console.log('[音频代理] 响应内容:', text.substring(0, 200));
+      return res.status(500).send('音频文件无效');
+    }
+
+    // 设置响应头
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'none');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+
+    // 流式传输音频数据
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(Buffer.from(value));
+    }
+    res.end();
+    console.log('[音频代理] 传输完成');
+
+  } catch (error) {
+    console.error('[音频代理] 错误:', error);
+    res.status(500).send('音频加载失败');
   }
 });
 

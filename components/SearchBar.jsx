@@ -7,28 +7,14 @@ export default function SearchBar({ onSearch, onImport, onLoading }) {
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isPlaylistUrl = (url) => {
-    return /playlist\/(\d+)/.test(url) || /y\.qq\.com.*playlist/.test(url);
-  };
-
-  const isSongUrl = (url) => {
-    return /song\/(\w+)/.test(url) || /y\.qq\.com.*song/.test(url);
-  };
-
-  const extractPlaylistId = (url) => {
-    const match = url.match(/playlist\/(\d+)/);
-    return match ? match[1] : null;
-  };
-
-  const extractSongId = (url) => {
-    const match = url.match(/song\/(\w+)/);
-    return match ? match[1] : null;
-  };
+  const isPlaylistUrl = (url) => /playlist\/(\d+)/.test(url) || /y\.qq\.com.*playlist/.test(url);
+  const isSongUrl = (url) => /song\/(\w+)/.test(url) || /y\.qq\.com.*song/.test(url);
+  const extractPlaylistId = (url) => { const m = url.match(/playlist\/(\d+)/); return m ? m[1] : null; };
+  const extractSongId = (url) => { const m = url.match(/song\/(\w+)/); return m ? m[1] : null; };
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!keyword.trim()) return;
-    
     const input = keyword.trim();
     
     setLoading(true);
@@ -36,37 +22,22 @@ export default function SearchBar({ onSearch, onImport, onLoading }) {
     
     try {
       if (isPlaylistUrl(input)) {
-        // 导入歌单
         const id = extractPlaylistId(input);
-        if (!id) {
-          alert('无法识别的歌单链接格式');
-          return;
-        }
-        
+        if (!id) { alert('无法识别的歌单链接格式'); return; }
         const res = await api.getPlaylist(id);
         if (res.data?.list?.length > 0) {
           onImport?.(res.data.list, `歌单: ${res.data.name || ''}`);
           onSearch?.([]);
-        } else {
-          alert('歌单为空或获取失败');
-        }
+        } else { alert('歌单为空或获取失败'); }
       } else if (isSongUrl(input)) {
-        // 导入单曲
         const id = extractSongId(input);
-        if (!id) {
-          alert('无法识别的歌曲链接格式');
-          return;
-        }
-        
+        if (!id) { alert('无法识别的歌曲链接格式'); return; }
         const res = await api.getSongDetail(id);
         if (res.data) {
           onImport?.([res.data], `单曲: ${res.data.name || ''}`);
           onSearch?.([]);
-        } else {
-          alert('歌曲不存在');
-        }
+        } else { alert('歌曲不存在'); }
       } else {
-        // 正常搜索
         const res = await api.search(input);
         onSearch?.(res.data || []);
       }
@@ -79,28 +50,30 @@ export default function SearchBar({ onSearch, onImport, onLoading }) {
   };
 
   return (
-    <div className="card">
-      <h2>搜索 / 导入</h2>
-      <form onSubmit={handleSearch} className="input-group">
+    <div>
+      <form onSubmit={handleSearch} className="search-container">
         <input
           type="text"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="输入歌曲名、歌手、专辑，或粘贴 QQ音乐歌曲/歌单链接..."
+          placeholder="输入歌曲名、歌手、专辑，或粘贴 QQ音乐链接..."
           disabled={loading}
-          style={{ width: '100%' }}
+          className="search-input"
         />
         <button 
           type="submit" 
-          className="btn-primary"
+          className="search-btn"
           disabled={loading}
         >
-          {loading ? '处理中...' : '搜索 / 导入'}
+          {loading ? '...' : '搜索'}
         </button>
       </form>
-      <p style={{ marginTop: '8px', fontSize: '12px', color: '#999' }} >
-        支持：关键词搜索 | 歌曲链接导入 | 歌单链接导入
-      </p>
+      
+      <div className="search-tags">
+        <span className="search-tag">关键词搜索</span>
+        <span className="search-tag">歌曲链接导入</span>
+        <span className="search-tag">歌单链接导入</span>
+      </div>
     </div>
   );
 }

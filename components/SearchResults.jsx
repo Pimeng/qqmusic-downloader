@@ -1,10 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { 
+  Play, Pause, Download, Plus, Check, Loader2, 
+  Music, ExternalLink, Headphones
+} from 'lucide-react';
 import { api, downloadSong, getProxyImageUrl } from '../lib/api';
 
-export default function SearchResults({ results, onAddToList, songs }) {
+export default function SearchResults({ results, onAddToList, songs, onDownload, onPlay }) {
   const [adding, setAdding] = useState({});
+  const [previewing, setPreviewing] = useState(null);
 
   const isAdded = (mid) => songs.some(s => s.mid === mid);
 
@@ -12,24 +17,35 @@ export default function SearchResults({ results, onAddToList, songs }) {
     if (isAdded(song.mid)) return;
     setAdding(prev => ({ ...prev, [song.mid]: true }));
     onAddToList(song);
-    setTimeout(() => {
-      setAdding(prev => ({ ...prev, [song.mid]: false }));
-    }, 500);
+    setTimeout(() => setAdding(prev => ({ ...prev, [song.mid]: false })), 500);
   };
 
   const handleAddAll = () => {
-    results.forEach(song => {
-      if (!isAdded(song.mid)) {
-        onAddToList(song);
-      }
-    });
+    results.forEach(song => { if (!isAdded(song.mid)) onAddToList(song); });
   };
 
   const handleDownload = async (song) => {
     try {
       downloadSong(song, `${song.name} - ${song.artist}.mp3`);
+      onDownload?.();
+    } catch (err) { alert('下载失败: ' + err.message); }
+  };
+
+  const handlePreview = async (song) => {
+    if (previewing === song.mid) return;
+    setPreviewing(song.mid);
+    try {
+      // 传入完整 song 对象，让后端获取 raw 数据来计算 vkey
+      const res = await api.getSongUrl(song.mid, true, song); 
+      if (res.data?.url) {
+        onPlay?.({ ...song, url: res.data.url });
+      } else {
+        alert('无法获取试听链接，可能需要登录');
+      }
     } catch (err) {
-      alert('下载失败: ' + err.message);
+      alert('试听失败: ' + err.message);
+    } finally {
+      setPreviewing(null);
     }
   };
 
@@ -38,83 +54,114 @@ export default function SearchResults({ results, onAddToList, songs }) {
   const addedCount = results.filter(s => isAdded(s.mid)).length;
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }} >
-        <h2>搜索结果 ({results.length})</h2>
-        <button 
-          className="btn-primary" 
-          onClick={handleAddAll}
-          disabled={addedCount === results.length}
-          style={{ fontSize: '13px', padding: '6px 12px' }}
-        >
-          {addedCount === results.length ? '已全部添加' : `添加全部 (${results.length - addedCount})`}
-        </button>
+    <div>
+      <div className="section-header">
+        <div className="section-title">
+          <Music size={20} style={{ marginRight: '8px' }} />
+          搜索结果
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className="section-count">{results.length}</div>
+          <button 
+            className="btn-brutal"
+            onClick={handleAddAll}
+            disabled={addedCount === results.length}
+          >
+            <Plus size={14} />
+            {addedCount === results.length ? ' 已添加' : ` 全部 (${results.length - addedCount})`}
+          </button>
+        </div>
       </div>
 
-      <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }} >
-        <table className="song-list">
-          <thead>
-            <tr>
-              <th style={{ width: '60px' }}>封面</th>
-              <th>歌曲</th>
-              <th>歌手</th>
-              <th style={{ width: '150px' }}>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map(song => (
-              <tr key={song.mid}>
-                <td>
-                  {song.pic ? (
-                    <img src={getProxyImageUrl(song.pic)} alt={song.name} style={{ width: '50px', height: '50px', borderRadius: '4px', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ 
-                      width: '50px', 
-                      height: '50px', 
-                      background: '#e0e0e0', 
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#999',
-                      fontSize: '12px'
-                    }}>
-                      无封面
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <div>{song.name}</div>
-                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }} >
-                    <a href={song.link} target="_blank" rel="noopener noreferrer" style={{ color: '#667eea' }} >
-                      在 QQ音乐打开
-                    </a>
-                  </div>
-                </td>
-                <td>{song.artist}</td>
-                <td>
-                  <div style={{ display: 'flex', gap: '5px' }} >
-                    <button 
-                      className="btn-success" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => handleDownload(song)}
-                    >
-                      下载
-                    </button>
-                    <button 
-                      className={isAdded(song.mid) ? 'btn-secondary' : 'btn-primary'} 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => handleAdd(song)}
-                      disabled={isAdded(song.mid) || adding[song.mid]}
-                    >
-                      {adding[song.mid] ? '添加中...' : isAdded(song.mid) ? '已添加' : '添加'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="results-grid">
+        {results.map((song) => (
+          <div key={song.mid} className="result-cell">
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              {song.pic ? (
+                <img 
+                  src={getProxyImageUrl(song.pic)} 
+                  alt={song.name}
+                  style={{ 
+                    width: '64px', 
+                    height: '64px', 
+                    objectFit: 'cover',
+                    border: '2px solid var(--border)'
+                  }}
+                />
+              ) : (
+                <div style={{ 
+                  width: '64px', 
+                  height: '64px', 
+                  border: '2px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'var(--bg-elevated)'
+                }}
+              >
+                <Music size={24} color="var(--fg-muted)" />
+                </div>
+              )}
+              
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ 
+                  fontSize: '1rem', 
+                  fontWeight: 700, 
+                  marginBottom: '4px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>{song.name}</div>
+                <div style={{ color: 'var(--fg-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>{song.artist}</div>
+                <a 
+                  href={song.link} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ 
+                    color: 'var(--accent-2)', 
+                    fontSize: '0.7rem', 
+                    textDecoration: 'none',
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  在QQ音乐打开 <ExternalLink size={10} />
+                </a>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn-play"
+                onClick={() => handlePreview(song)}
+                disabled={previewing === song.mid}
+                title="试听"
+              >
+                {previewing === song.mid ? <Loader2 size={16} className="spin" /> : <Headphones size={16} />}
+              </button>
+              
+              <button 
+                className="btn-brutal accent-2"
+                style={{ flex: 1, justifyContent: 'center', fontSize: '0.8rem' }}
+                onClick={() => handleDownload(song)}
+              >
+                <Download size={14} /> 下载
+              </button>
+              <button 
+                className={isAdded(song.mid) ? 'btn-brutal' : 'btn-brutal accent-3'}
+                style={{ flex: 1, justifyContent: 'center', fontSize: '0.8rem' }}
+                onClick={() => handleAdd(song)}
+                disabled={isAdded(song.mid) || adding[song.mid]}
+              >
+                {adding[song.mid] ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}
+                {adding[song.mid] ? ' 添加中' : isAdded(song.mid) ? ' 已添加' : ' 添加'}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
