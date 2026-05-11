@@ -260,6 +260,24 @@ export default function SongList({ songs, onSongsChange, selectedSongs, onSelect
           
           <button 
             className="btn-brutal"
+            style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+            onClick={toggleInvertSelection}
+            disabled={batchLoading}
+            title="反选"
+          >
+            反选
+          </button>
+          <button 
+            className="btn-brutal"
+            style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+            onClick={handleBatchDelete}
+            disabled={batchLoading}
+            title="删除"
+          >
+            <Trash2 size={14} /> 删除
+          </button>
+          <button 
+            className="btn-brutal"
             onClick={handleBatchDownload}
             disabled={batchLoading}
           >
