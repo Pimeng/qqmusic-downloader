@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { 
   Search, Settings, ListMusic, Play, Pause, 
   Download, Plus, Check, Trash2, Music, X,
-  Volume2, FileText, AlertCircle, Loader2
+  Volume2, FileText, AlertCircle, Loader2, Menu
 } from 'lucide-react';
 import CustomCursor from './CustomCursor';
 import Drawer from './Drawer';
@@ -31,6 +31,7 @@ export default function QQMusicDownloader() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasSearched, setHasSearched] = useState(false);
   const [highQuality, setHighQuality] = useState(true);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('qqmusic_downloaded_count');
@@ -38,6 +39,17 @@ export default function QQMusicDownloader() {
     const savedHQ = localStorage.getItem('qqmusic_high_quality');
     if (savedHQ) setHighQuality(savedHQ === 'true');
   }, []);
+
+  // 点击外部关闭移动端菜单
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showMobileMenu && !e.target.closest('.top-bar-nav-mobile')) {
+        setShowMobileMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showMobileMenu]);
 
   const handleSearch = (results, kw, page = 1) => {
     setSearchResults(results);
@@ -129,21 +141,61 @@ export default function QQMusicDownloader() {
         </div>
         
         <nav className="top-bar-nav">
-          <button 
-            className="top-bar-btn"
-            onClick={() => setShowCookieDrawer(true)}
-            title="Cookie设置"
-          >
-            <Settings size={18} />
-          </button>
-          <button 
-            className="top-bar-btn"
-            onClick={() => setShowListDrawer(true)}
-            title={`歌曲列表 (${songs.length})`}
-          >
-            <ListMusic size={18} />
-            <span className="top-bar-badge">{songs.length}</span>
-          </button>
+          {/* Desktop buttons */}
+          <div className="top-bar-nav-desktop">
+            <button 
+              className="top-bar-btn"
+              onClick={() => setShowCookieDrawer(true)}
+              title="Cookie设置"
+            >
+              <Settings size={18} />
+            </button>
+            <button 
+              className="top-bar-btn"
+              onClick={() => setShowListDrawer(true)}
+              title={`歌曲列表 (${songs.length})`}
+            >
+              <ListMusic size={18} />
+              <span className="top-bar-badge">{songs.length}</span>
+            </button>
+          </div>
+          
+          {/* Mobile menu */}
+          <div className="top-bar-nav-mobile">
+            <button 
+              className="top-bar-btn"
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              title="菜单"
+            >
+              <Menu size={18} />
+              {songs.length > 0 && <span className="top-bar-badge">{songs.length}</span>}
+            </button>
+            
+            {showMobileMenu && (
+              <div className="mobile-menu-dropdown">
+                <button 
+                  className="mobile-menu-item"
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    setShowCookieDrawer(true);
+                  }}
+                >
+                  <Settings size={16} />
+                  <span>Cookie 设置</span>
+                </button>
+                <button 
+                  className="mobile-menu-item"
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    setShowListDrawer(true);
+                  }}
+                >
+                  <ListMusic size={16} />
+                  <span>下载列表 ({songs.length})</span>
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
       </header>
 
