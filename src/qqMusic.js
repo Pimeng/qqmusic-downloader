@@ -426,6 +426,24 @@ export default class QQMusic {
     return code === 0 || code === '0';
   }
 
+  async validateCookie() {
+    try {
+      const url = `https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg?_=${Date.now()}&cv=4747474&ct=24&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0&uin=0&g_tk_new_20200303=5381&g_tk=5381&cid=205360838&userid=0&reqfrom=1&reqtype=0&hostUin=0&loginUin=0`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      const res = await response.json();
+      return res.code === 0 || res.code === '0';
+    } catch {
+      return false;
+    }
+  }
+
   #md5(text) {
     return crypto.createHash('md5').update(String(text)).digest('hex');
   }

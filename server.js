@@ -35,13 +35,14 @@ async function validateServerCookie() {
 
   try {
     const qqMusic = new QQMusic({ cookie: QM_COOKIES });
-    const results = await qqMusic.search('周杰伦', 1, 5);
-    if (results && results.length > 0) {
+    // 使用查询用户信息验证（搜索不需要有效Cookie也能工作）
+    const isValid = await qqMusic.validateCookie();
+    if (isValid) {
       serverCookieStatus = { hasCookie: true, isValid: true, checkedAt: new Date() };
       console.log('[Cookie] 服务端 Cookie 验证通过 ✓');
     } else {
       serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date() };
-      console.log('[Cookie] 服务端 Cookie 验证失败：搜索无结果');
+      console.log('[Cookie] 服务端 Cookie 验证失败：Cookie 已失效');
     }
   } catch (error) {
     serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date() };
@@ -254,7 +255,8 @@ server.post('/api/song/download', async (req, res) => {
     const response = await fetch(playUrl, {
       headers: {
         'Referer': 'https://y.qq.com/',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
+        'Cookie': qqMusic.cookie
       },
       redirect: 'follow'
     });
@@ -345,8 +347,8 @@ server.get('/api/proxy/audio', async (req, res) => {
     const targetUrl = decodeURIComponent(url);
     console.log('[音频代理] 代理URL:', targetUrl.substring(0, 150));
 
-    // 获取 Cookie
-    const cookie = req.headers['x-qqmusic-cookie'] || '';
+    // 优先使用有效的服务端 Cookie
+    const cookie = (serverCookieStatus.isValid ? QM_COOKIES : '') || req.headers['x-qqmusic-cookie'] || '';
 
     // 直接下载完整音频内容
     console.log('[音频代理] 开始下载音频...');
@@ -419,10 +421,14 @@ server.get('/api/download', async (req, res) => {
       targetUrl = url;
     }
     
+    // 优先使用有效的服务端 Cookie
+    const cookie = (serverCookieStatus.isValid ? QM_COOKIES : '') || req.headers['x-qqmusic-cookie'] || '';
+    
     const response = await fetch(targetUrl, {
       headers: {
         'Referer': 'https://y.qq.com/',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Cookie': cookie
       },
       redirect: 'follow'
     });

@@ -95,13 +95,14 @@ async function validateServerCookie() {
 
   try {
     const qqMusic = new QQMusic({ cookie });
-    const results = await qqMusic.search('周杰伦', 1, 5);
-    if (results && results.length > 0) {
+    // 使用查询用户信息验证（搜索不需要有效Cookie也能工作）
+    const isValid = await qqMusic.validateCookie();
+    if (isValid) {
       serverCookieStatus = { hasCookie: true, isValid: true, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: '' };
       console.log('[Cookie] 服务端 Cookie 验证通过 ✓');
     } else {
-      serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: '搜索无结果，Cookie 可能无效' };
-      console.log('[Cookie] 服务端 Cookie 验证失败：搜索无结果');
+      serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: 'Cookie 已失效' };
+      console.log('[Cookie] 服务端 Cookie 验证失败：Cookie 已失效');
     }
   } catch (error) {
     serverCookieStatus = { hasCookie: true, isValid: false, checkedAt: new Date(), cookieLength: cookie.length, errorMsg: error.message };
@@ -363,7 +364,8 @@ app.post('/song/download', async (req, res) => {
     const response = await fetch(playUrl, {
       headers: {
         'Referer': 'https://y.qq.com/',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
+        'Cookie': qqMusic.cookie
       },
       redirect: 'follow'
     });
@@ -452,7 +454,10 @@ app.get('/proxy/audio', async (req, res) => {
     const targetUrl = decodeURIComponent(url);
     console.log('[proxy audio] 代理URL:', targetUrl.substring(0, 150));
 
-    const cookie = req.headers['x-qqmusic-cookie'] || '';
+    // 优先使用有效的服务端 Cookie
+    const serverCookie = serverCookieStatus.isValid ? getServerCookie() : '';
+    const clientCookie = req.headers['x-qqmusic-cookie'] || '';
+    const cookie = serverCookie || clientCookie;
 
     console.log('[proxy audio] 开始下载音频...');
     const response = await fetch(targetUrl, {
@@ -521,10 +526,16 @@ app.get('/download', async (req, res) => {
       targetUrl = url;
     }
     
+    // 优先使用有效的服务端 Cookie
+    const serverCookie = serverCookieStatus.isValid ? getServerCookie() : '';
+    const clientCookie = req.headers['x-qqmusic-cookie'] || '';
+    const cookie = serverCookie || clientCookie;
+
     const response = await fetch(targetUrl, {
       headers: {
         'Referer': 'https://y.qq.com/',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Cookie': cookie
       },
       redirect: 'follow'
     });
